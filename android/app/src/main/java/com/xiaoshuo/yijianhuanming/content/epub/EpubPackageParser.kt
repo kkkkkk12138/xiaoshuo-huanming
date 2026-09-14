@@ -1,7 +1,6 @@
 package com.xiaoshuo.yijianhuanming.content.epub
 
 import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Document
 import org.w3c.dom.Element
 
@@ -52,21 +51,7 @@ class EpubPackageParser {
         }
     }
 
-    private fun parseXml(file: File): Document {
-        if (!file.isFile) throw EpubValidationException("EPUB 包文件不存在")
-        val factory = DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = true
-            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-            setFeature("http://xml.org/sax/features/external-general-entities", false)
-            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-            setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-            setAttribute("http://javax.xml.XMLConstants/property/accessExternalDTD", "")
-            setAttribute("http://javax.xml.XMLConstants/property/accessExternalSchema", "")
-            isXIncludeAware = false
-            isExpandEntityReferences = false
-        }
-        return factory.newDocumentBuilder().parse(file)
-    }
+    private fun parseXml(file: File): Document = EpubXmlParser.parse(file)
 
     private fun resolveInside(root: File, path: String): File {
         if (path.isBlank() || '\u0000' in path || path.startsWith("/") || path.startsWith("\\")) {

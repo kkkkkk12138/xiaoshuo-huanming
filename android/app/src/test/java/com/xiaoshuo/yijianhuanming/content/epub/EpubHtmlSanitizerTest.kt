@@ -29,6 +29,27 @@ class EpubHtmlSanitizerTest {
     }
 
     @Test
+    fun preserves_only_known_no_indent_paragraph_semantic() {
+        val html = """
+            <html><body>
+              <p class="body-text">正文段落</p>
+              <p class="no-indent custom">书籍信息</p>
+            </body></html>
+        """.trimIndent()
+
+        val clean = sanitizer.sanitize(
+            html = html,
+            chapterPath = "OEBPS/info.xhtml",
+            sessionId = "book",
+            allowedImages = emptySet(),
+        )
+
+        assertTrue(clean.contains("<p class=\"reader-no-indent\">书籍信息</p>"))
+        assertFalse(clean.contains("body-text"))
+        assertFalse(clean.contains("custom"))
+    }
+
+    @Test
     fun removes_scripts_active_content_author_css_events_and_remote_urls() {
         val clean = sanitizer.sanitize(
             html = resource("malicious-content.xhtml"),

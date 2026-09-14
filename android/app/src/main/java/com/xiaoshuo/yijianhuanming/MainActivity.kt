@@ -267,7 +267,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun selectDocument() {
-        openDocument.launch(arrayOf("text/plain", "application/epub+zip"))
+        openDocument.launch(
+            arrayOf(
+                "text/plain",
+                "application/epub+zip",
+                "application/zip",
+                "application/octet-stream",
+            ),
+        )
     }
 
     private fun recoverSessionError(failed: ReadingSessionUiState.Failed) {
