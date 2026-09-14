@@ -83,27 +83,27 @@ jobs:
       - name: Prepare release assets
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk \
-            xiaoshuo-yijian-huanming-android-0.2.0-debug.apk
-          sha256sum xiaoshuo-yijian-huanming-android-0.2.0-debug.apk \
-            > xiaoshuo-yijian-huanming-android-0.2.0-debug.apk.sha256
+            xiaoshuo-yijian-huanming-android-0.2.1-debug.apk
+          sha256sum xiaoshuo-yijian-huanming-android-0.2.1-debug.apk \
+            > xiaoshuo-yijian-huanming-android-0.2.1-debug.apk.sha256
       - name: Publish Android beta prerelease
         uses: softprops/action-gh-release@v2
         with:
-          name: Android 0.2.0 核心体验修复测试版
+          name: Android 0.2.1 EPUB 兼容与首页优化测试版
           prerelease: true
           body: |
             ## 正确下载方式
 
-            请下载 `xiaoshuo-yijian-huanming-android-0.2.0-debug.apk`。
+            请下载 `xiaoshuo-yijian-huanming-android-0.2.1-debug.apk`。
             不要下载 GitHub 自动生成的 `Source code`，它不是可安装包。
 
-            已安装旧测试版的用户可从 `0.1.1 (2)` 直接覆盖升级到 `0.2.0 (3)`，无需卸载，规则和阅读记录会保留。
+            已安装旧测试版的用户可从 `0.1.1 (2)` 或 `0.2.0 (3)` 直接覆盖升级到 `0.2.1 (4)`，无需卸载，规则和阅读记录会保留。
 
             ## 主要修复
 
-            - 修复窄屏和鸿蒙设备上的阅读页按钮溢出、状态栏遮挡。
-            - 规则应用增加过程与替换数量反馈，保存后立即刷新正文。
-            - 修复网页链接入口、TXT 文件名以及 TXT/EPUB 阅读进度。
+            - 修复部分 Android 文件提供方把 EPUB 标记为 ZIP 后无法选择或打开的问题。
+            - 兼容 EPUB 3 的 HTML5 DOCTYPE，并安全保留正文缩进和无缩进段落。
+            - 优化首页主次操作、最近阅读空状态以及横屏和大字体滚动体验。
           files: |
-            xiaoshuo-yijian-huanming-android-0.2.0-debug.apk
-            xiaoshuo-yijian-huanming-android-0.2.0-debug.apk.sha256
+            xiaoshuo-yijian-huanming-android-0.2.1-debug.apk
+            xiaoshuo-yijian-huanming-android-0.2.1-debug.apk.sha256

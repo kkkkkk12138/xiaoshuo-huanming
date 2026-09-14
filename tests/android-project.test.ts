@@ -8,8 +8,8 @@ describe('Android project', () => {
     expect(build).toContain('compileSdk = 36');
     expect(build).toContain('minSdk = 26');
     expect(build).toContain('targetSdk = 36');
-    expect(build).toContain('versionCode = 3');
-    expect(build).toContain('versionName = "0.2.0"');
+    expect(build).toContain('versionCode = 4');
+    expect(build).toContain('versionName = "0.2.1"');
   });
 
   it('registers the Room migration without destructive fallback', async () => {

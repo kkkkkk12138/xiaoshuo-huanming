@@ -21,6 +21,12 @@ class EpubHtmlSanitizer {
         val normalizedImages = allowedImages.mapTo(hashSetOf()) { normalizeArchivePath(it) }
         val document = Jsoup.parse(html)
         document.select(ACTIVE_CONTENT).remove()
+        // Preserve only a known paragraph semantic, never arbitrary author CSS.
+        document.select("p").forEach { paragraph ->
+            val noIndent = paragraph.hasClass("no-indent")
+            paragraph.removeAttr("class")
+            if (noIndent) paragraph.addClass("reader-no-indent")
+        }
         document.select("img").forEach { image ->
             val resolved = resolveLocalResource(chapterPath, image.attr("src"))
             if (resolved == null || resolved !in normalizedImages) {
@@ -84,6 +90,7 @@ class EpubHtmlSanitizer {
             )
             .addAttributes("img", "src", "alt", "title", "width", "height")
             .addAttributes("a", "title")
+            .addAttributes("p", "class")
             .addAttributes("th", "colspan", "rowspan")
             .addAttributes("td", "colspan", "rowspan")
             .addProtocols("img", "src", "https")

@@ -103,7 +103,17 @@ class EpubAssetPathHandler(
     companion object {
         const val STRICT_CSP =
             "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; font-src 'none'; frame-src 'none'"
-        const val BUILT_IN_THEME =
-            "html{color-scheme:light dark}body{max-width:46rem;margin:0 auto;padding:24px 20px 35vh;font-family:serif;font-size:1.08rem;line-height:1.85;overflow-wrap:anywhere}img{max-width:100%;height:auto}p{text-align:justify}a{color:inherit}"
+        const val BUILT_IN_THEME = """
+            html{color-scheme:light dark;-webkit-text-size-adjust:100%}
+            body{box-sizing:border-box;max-width:42rem;margin:0 auto;padding:24px 20px 64px;font-family:serif;font-size:1.08rem;line-height:1.85;overflow-wrap:anywhere}
+            h1{font-size:1.35em;line-height:1.55;text-align:center;margin:0 0 1.5em;font-weight:600}
+            h2,h3,h4,h5,h6{line-height:1.6;margin:1.5em 0 .8em}
+            p{margin:.65em 0;text-align:justify;text-indent:2em}
+            p.reader-no-indent,blockquote p,li p,td p,th p{text-indent:0}
+            img{display:block;max-width:100%;height:auto;margin:1em auto}
+            pre{white-space:pre-wrap}blockquote{margin:1em 0;padding-inline-start:1em;border-inline-start:2px solid currentColor}
+            table{display:block;max-width:100%;overflow-x:auto}a{color:inherit}
+            @media(max-width:360px){body{padding-inline:16px}}
+        """
     }
 }

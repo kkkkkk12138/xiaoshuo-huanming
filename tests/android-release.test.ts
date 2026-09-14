@@ -86,6 +86,8 @@ describe('Android release', () => {
     expect(workflow).toContain("tags: ['v*-android-beta']");
     expect(workflow).toContain('softprops/action-gh-release@v2');
     expect(workflow).toContain('prerelease: true');
+    expect(workflow).toContain('xiaoshuo-yijian-huanming-android-0.2.1-debug.apk');
+    expect(workflow).toContain('Android 0.2.1 EPUB 兼容与首页优化测试版');
     expect(workflow).toContain(
       'android/app/build/outputs/apk/debug/app-debug.apk',
     );
@@ -107,6 +109,8 @@ describe('Android release', () => {
 
     expect(workflow).toContain('body: |');
     expect(workflow).toContain('不要下载 GitHub 自动生成的 `Source code`');
-    expect(workflow).toContain('可从 `0.1.1 (2)` 直接覆盖升级');
+    expect(workflow).toContain(
+      '可从 `0.1.1 (2)` 或 `0.2.0 (3)` 直接覆盖升级到 `0.2.1 (4)`',
+    );
   });
 });

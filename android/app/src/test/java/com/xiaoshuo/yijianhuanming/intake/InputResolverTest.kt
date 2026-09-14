@@ -67,6 +67,22 @@ class InputResolverTest {
     }
 
     @Test
+    fun accepts_epub_when_provider_reports_generic_zip_mime() {
+        val epub = "content://books/provider-mislabeled.epub"
+        documents.add(
+            epub,
+            mimeType = "application/zip",
+            displayName = "provider-mislabeled.epub",
+            header = byteArrayOf(0x50, 0x4b, 0x03, 0x04),
+        )
+
+        assertTrue(
+            resolver.resolve(InputRequest(InputAction.OpenDocument, data = epub)).getOrThrow()
+                is ResolvedInput.EpubDocument,
+        )
+    }
+
+    @Test
     fun open_document_persists_read_only_permission_or_marks_session_only() {
         val persisted = "content://books/persisted.txt"
         documents.add(persisted, "text/plain", "persisted.txt", "text".toByteArray())

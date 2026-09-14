@@ -4,29 +4,29 @@
 
 ## Android 下载
 
-当前公开版本是 Android `0.2.0 (3) Debug Beta`，用于功能内测。
+当前公开版本是 Android `0.2.1 (4) Debug Beta`，用于功能内测。
 
 ### 直接安装
 
-[下载 Android 0.2.0 APK](https://github.com/kkkkkk12138/xiaoshuo-huanming/releases/download/v0.2.0-android-beta/xiaoshuo-yijian-huanming-android-0.2.0-debug.apk)
+[下载 Android 0.2.1 APK](https://github.com/kkkkkk12138/xiaoshuo-huanming/releases/download/v0.2.1-android-beta/xiaoshuo-yijian-huanming-android-0.2.1-debug.apk)
 
 适合只想安装使用的用户。Android 会提示是否允许浏览器或文件管理器“安装未知应用”，安装完成后可以关闭这项授权。
 
-也可以进入 [Android 0.2.0 Beta 发布页](https://github.com/kkkkkk12138/xiaoshuo-huanming/releases/tag/v0.2.0-android-beta) 查看版本说明和校验文件。
+也可以进入 [Android 0.2.1 Beta 发布页](https://github.com/kkkkkk12138/xiaoshuo-huanming/releases/tag/v0.2.1-android-beta) 查看版本说明和校验文件。
 
-> 请只下载 `xiaoshuo-yijian-huanming-android-0.2.0-debug.apk`。不要下载 `Source code (zip)`、`Source code (tar.gz)` 或名称以 `DO-NOT-USE-old-signature-` 开头的旧文件，它们不能用于正常覆盖升级。
+> 请只下载 `xiaoshuo-yijian-huanming-android-0.2.1-debug.apk`。不要下载 `Source code (zip)`、`Source code (tar.gz)` 或名称以 `DO-NOT-USE-old-signature-` 开头的旧文件，它们不能用于正常覆盖升级。
 
 ### 覆盖升级
 
-已安装 `0.1.1 (2)` 的用户可直接打开新版 APK 覆盖安装到 `0.2.0 (3)`，无需卸载旧版；换名规则、最近阅读和阅读位置会保留。若系统提示签名不一致，请确认下载的是上方标准文件名 APK，而不是旧签名文件。
+已安装 `0.1.1 (2)` 或 `0.2.0 (3)` 的用户可直接打开新版 APK 覆盖安装到 `0.2.1 (4)`，无需卸载旧版；换名规则、最近阅读和阅读位置会保留。若系统提示签名不一致，请确认下载的是上方标准文件名 APK，而不是旧签名文件。
 
 > 当前 APK 仍使用与 `0.1.1 (2)` 相同的测试证书，仅适合内测。未来正式版若切换长期 Release 证书，可能无法直接覆盖此测试版。
 
 ### 本次修复
 
-- 修复窄屏和鸿蒙设备上的阅读页按钮溢出、状态栏遮挡。
-- 规则应用增加“正在生效”和替换数量反馈，保存后立即刷新正文。
-- 修复“打开网页链接”、TXT 文件名、TXT/EPUB 阅读进度等问题。
+- 修复部分系统把 EPUB 标记为 ZIP 后无法选择或打开的问题。
+- 兼容 EPUB 3 的 HTML5 DOCTYPE，并恢复正文缩进等安全排版语义。
+- 优化首页主次操作、最近阅读空状态以及横屏和大字体滚动体验。
 
 ## Android 使用方法
 

@@ -85,7 +85,7 @@ class DefaultInputResolver(
     private fun isEpub(metadata: DocumentMetadata): Boolean {
         val mime = metadata.mimeType?.lowercase()
         val extensionMatches = metadata.displayName?.lowercase()?.endsWith(".epub") == true
-        val mimeMatches = mime == EPUB_MIME || mime == GENERIC_MIME || mime == null
+        val mimeMatches = mime == EPUB_MIME || mime == ZIP_MIME || mime == GENERIC_MIME || mime == null
         return extensionMatches && mimeMatches && metadata.header.startsWith(ZIP_HEADER)
     }
 
@@ -107,6 +107,7 @@ class DefaultInputResolver(
         val TRAILING_PUNCTUATION = charArrayOf('.', ',', ';', ':', '!', '?', ')', ']', '}', '。', '，', '；', '！', '？')
         val ZIP_HEADER = byteArrayOf(0x50, 0x4b, 0x03, 0x04)
         const val EPUB_MIME = "application/epub+zip"
+        const val ZIP_MIME = "application/zip"
         const val GENERIC_MIME = "application/octet-stream"
     }
 }
