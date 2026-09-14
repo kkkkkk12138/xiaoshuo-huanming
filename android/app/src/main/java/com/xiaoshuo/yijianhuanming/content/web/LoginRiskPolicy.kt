@@ -15,20 +15,23 @@ class LoginRiskPolicy {
         private val LOGIN_PATH_SEGMENTS = setOf(
             "login",
             "signin",
-            "sign-in",
             "passport",
+            "auth",
         )
 
         const val PASSWORD_FORM_GUARD_SCRIPT = """
             (() => {
-              const password = document.querySelector('input[type="password"]');
-              if (!password) return JSON.stringify({ loginRisk: false });
-              document.querySelectorAll('form').forEach(form => {
-                if (form.querySelector('input[type="password"]')) {
-                  form.addEventListener('submit', event => event.preventDefault(), { capture: true });
-                }
+              const passwords = Array.from(document.querySelectorAll('input[type="password"]'));
+              const visible = passwords.some(password => {
+                const style = getComputedStyle(password);
+                const bounds = password.getBoundingClientRect();
+                return style.display !== 'none' &&
+                  style.visibility !== 'hidden' &&
+                  style.opacity !== '0' &&
+                  bounds.width > 0 &&
+                  bounds.height > 0;
               });
-              return JSON.stringify({ loginRisk: true });
+              return JSON.stringify({ loginRisk: visible });
             })()
         """
 

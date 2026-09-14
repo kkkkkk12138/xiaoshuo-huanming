@@ -9,13 +9,22 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.nio.charset.Charset
 import java.util.UUID
+import com.xiaoshuo.yijianhuanming.library.restoreTxtOffset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+data class TxtResumePosition(
+    val textOffset: Long?,
+    val textTotalAtSave: Long?,
+    val scrollRatio: Double,
+)
 
 data class TxtReaderDocument(
     val title: String,
     val sessionId: String,
     val readerUrl: String,
+    val totalUtf16Units: Long,
+    val initialOffset: Long,
     val manifest: TxtChunkManifest,
     val pathHandler: TxtAssetPathHandler,
 )
@@ -29,6 +38,7 @@ class TxtContentSource(
     context: Context,
     private val uri: Uri,
     private val selectedCharsetName: String? = null,
+    private val resumePosition: TxtResumePosition? = null,
     private val detector: TxtEncodingDetector = TxtEncodingDetector(),
 ) {
     private val resolver = context.contentResolver
@@ -66,18 +76,30 @@ class TxtContentSource(
                 }
             }
             val starts = manifest.chunks.joinToString(",") { it.startCharacterOffset.toString() }
+            val totalUtf16Units = manifest.totalCharacterOffset
+            val initialOffset = resumePosition?.let {
+                restoreTxtOffset(
+                    savedOffset = it.textOffset,
+                    savedTotal = it.textTotalAtSave,
+                    savedRatio = it.scrollRatio,
+                    currentTotal = totalUtf16Units,
+                )
+            } ?: 0L
             val url = buildString {
                 append("https://appassets.androidplatform.net/assets/reader/local-reader.html")
                 append("?session=").append(id)
                 append("&chunks=").append(manifest.chunks.size)
                 append("&starts=").append(starts)
-                append("&offset=0")
+                append("&totalUtf16Units=").append(totalUtf16Units)
+                append("&offset=").append(initialOffset)
             }
             TxtOpenResult.Ready(
                 TxtReaderDocument(
                     title = metadata.displayName ?: "TXT 阅读",
                     sessionId = id,
                     readerUrl = url,
+                    totalUtf16Units = totalUtf16Units,
+                    initialOffset = initialOffset,
                     manifest = manifest,
                     pathHandler = TxtAssetPathHandler(manifest),
                 ),

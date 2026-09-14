@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyRule, normalizeRules } from '../src/shared/rules';
+import { createEmptyRule, normalizeRules, sharedTrim } from '../src/shared/rules';
 import { loadRules, saveRules } from '../src/shared/storage';
 
 describe('normalizeRules', () => {
@@ -17,6 +17,10 @@ describe('normalizeRules', () => {
       { id: '3', source: '沈清辞', target: '林惊鹤' },
       { id: '1', source: '清辞', target: '惊鹤' }
     ]);
+  });
+
+  it('uses the fixed shared boundary whitespace table', () => {
+    expect(sharedTrim('\u0009\u00A0\uFEFF 宝\u3000宝 \u2007')).toBe('宝\u3000宝');
   });
 });
 

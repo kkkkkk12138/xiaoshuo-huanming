@@ -3,21 +3,34 @@ package com.xiaoshuo.yijianhuanming.reader
 import android.widget.Toast
 import android.webkit.CookieManager
 import android.webkit.WebStorage
+import android.os.SystemClock
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -25,11 +38,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -40,35 +52,60 @@ import com.xiaoshuo.yijianhuanming.content.web.NavigationDecision
 import com.xiaoshuo.yijianhuanming.content.web.WebSecurityCallbacks
 import com.xiaoshuo.yijianhuanming.content.web.WebViewProfile
 import com.xiaoshuo.yijianhuanming.content.txt.TxtAssetPathHandler
+import com.xiaoshuo.yijianhuanming.content.txt.TxtReaderDocument
 import com.xiaoshuo.yijianhuanming.content.epub.EpubChapter
 import com.xiaoshuo.yijianhuanming.content.epub.EpubLocation
 import com.xiaoshuo.yijianhuanming.content.epub.EpubReaderDocument
-import com.xiaoshuo.yijianhuanming.navigation.AdaptiveReaderChrome
 import com.xiaoshuo.yijianhuanming.navigation.ReaderBackTarget
 import com.xiaoshuo.yijianhuanming.navigation.readerBackTarget
+import com.xiaoshuo.yijianhuanming.library.ReadingProgress
+import com.xiaoshuo.yijianhuanming.library.ReadingProgressCoordinator
+import com.xiaoshuo.yijianhuanming.library.epubProgress
+import com.xiaoshuo.yijianhuanming.library.saveEpubBeforeChapterChange
+import com.xiaoshuo.yijianhuanming.library.txtRatio
+import kotlin.coroutines.resume
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+
+internal const val EPUB_CHAPTER_RATIO_SCRIPT =
+    "(function(){const d=document.documentElement;const max=Math.max(1,d.scrollHeight-d.clientHeight);const value=d.scrollHeight<=d.clientHeight?0:window.scrollY/max;return value})()"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderScreen(
     url: String,
+    readerSessionId: String = url,
     onClose: () -> Unit,
     profile: WebViewProfile = WebViewProfile.REMOTE_PUBLIC_WEB,
     txtPathHandler: TxtAssetPathHandler? = null,
+    txtDocument: TxtReaderDocument? = null,
+    txtSourceId: String? = null,
+    txtProgressCoordinator: ReadingProgressCoordinator? = null,
+    onTxtProgressChanged: suspend (ReadingProgress) -> Unit = {},
     epubDocument: EpubReaderDocument? = null,
-    onEpubLocationChanged: (EpubLocation) -> Unit = {},
+    epubProgressCoordinator: ReadingProgressCoordinator? = null,
+    onEpubLocationChanged: suspend (EpubLocation) -> Unit = {},
     onClearHistory: () -> Unit = {},
     onClearEpubCache: () -> Unit = {},
+    confirmedCleartextUrl: String? = null,
+    onOpenOtherUrl: () -> Unit = onClose,
     viewModel: ReaderViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.state.collectAsState()
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var announcedApplyGeneration by rememberSaveable(readerSessionId) { mutableStateOf(-1L) }
     var showRules by remember { mutableStateOf(false) }
     var showContents by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var runtime by remember { mutableStateOf<RuleRuntime?>(null) }
     var webView by remember { mutableStateOf<ReaderWebView?>(null) }
+    var loginBlocked by remember(url) { mutableStateOf(false) }
+    var pendingCleartextUrl by remember(url) { mutableStateOf<String?>(null) }
     var currentChapterId by remember(epubDocument) {
         mutableStateOf(epubDocument?.initialLocation?.chapterId)
     }
@@ -76,46 +113,160 @@ fun ReaderScreen(
         mutableStateOf(epubDocument?.initialUrl ?: url)
     }
     var needsInitialRestore by remember(epubDocument) { mutableStateOf(epubDocument != null) }
+    var needsInitialTxtRestore by remember(txtDocument) { mutableStateOf(txtDocument != null) }
     var fontScale by remember { mutableStateOf(1f) }
+    var lastTxtSampleAt by remember(txtDocument) { mutableStateOf(0L) }
+    var epubScrollSaveJob by remember(epubDocument) { mutableStateOf<Job?>(null) }
+    val fallbackTxtProgressCoordinator = remember(txtDocument?.sessionId, txtSourceId) {
+        ReadingProgressCoordinator(writer = onTxtProgressChanged).also { coordinator ->
+            txtDocument?.let { document ->
+                coordinator.rememberConfirmed(
+                    ReadingProgress(
+                        textOffset = document.initialOffset,
+                        textTotalAtSave = document.totalUtf16Units,
+                        scrollRatio = txtRatio(document.initialOffset, document.totalUtf16Units),
+                        lastOpenedAt = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        }
+    }
+    val activeTxtProgressCoordinator = txtProgressCoordinator ?: fallbackTxtProgressCoordinator
+    val fallbackEpubProgressCoordinator = remember(epubDocument?.sessionId) {
+        ReadingProgressCoordinator(writer = { progress ->
+            progress.chapterId?.let { chapterId ->
+                onEpubLocationChanged(EpubLocation(chapterId, progress.scrollRatio))
+            }
+        }).also { coordinator ->
+            epubDocument?.initialLocation?.let { location ->
+                coordinator.rememberConfirmed(epubProgress(location, System.currentTimeMillis()))
+            }
+        }
+    }
+    val activeEpubProgressCoordinator =
+        epubProgressCoordinator ?: fallbackEpubProgressCoordinator
     val currentChapter = epubDocument?.chapter(currentChapterId)
-    fun saveEpubLocation(afterSave: () -> Unit = {}) {
+    val readerTitle = txtDocument?.title
+        ?: epubDocument?.title
+        ?: android.net.Uri.parse(url).host
+        ?: "阅读"
+    val persistentError = when (val runtimeState = state.runtimeState) {
+        is RuntimeState.Failed -> runtimeState.error
+        is RuntimeState.OutOfSync -> runtimeState.error
+        else -> null
+    }
+    DisposableEffect(readerSessionId) {
+        viewModel.startSession(readerSessionId)
+        onDispose { viewModel.endSession(readerSessionId) }
+    }
+    androidx.compose.runtime.LaunchedEffect(state.applyGeneration, state.applyState) {
+        val success = state.applyState as? ApplyState.Success ?: return@LaunchedEffect
+        if (announcedApplyGeneration == state.applyGeneration) return@LaunchedEffect
+        announcedApplyGeneration = state.applyGeneration
+        showRules = false
+        snackbarHostState.showSnackbar(applyResultMessage(success.summary))
+    }
+    suspend fun captureTxtProgress(): ReadingProgress? {
+        val document = txtDocument ?: return null
+        val offset = webView?.evaluateLong(
+            "window.__TXT_READER__ ? window.__TXT_READER__.characterOffset() : null",
+        ) ?: return null
+        val clamped = offset.coerceIn(0, document.totalUtf16Units)
+        return ReadingProgress(
+            textOffset = clamped,
+            textTotalAtSave = document.totalUtf16Units,
+            scrollRatio = txtRatio(clamped, document.totalUtf16Units),
+            lastOpenedAt = System.currentTimeMillis(),
+        )
+    }
+    fun saveTxtProgress() {
+        if (txtDocument == null) return
+        scope.launch {
+            activeTxtProgressCoordinator.captureAndSave(::captureTxtProgress)
+        }
+    }
+    suspend fun captureEpubProgress(): ReadingProgress? {
         val chapterId = currentChapterId
-        val activeWebView = webView
-        if (chapterId == null || activeWebView == null) {
-            afterSave()
+        val ratio = webView?.evaluateDouble(EPUB_CHAPTER_RATIO_SCRIPT) ?: return null
+        return epubProgress(EpubLocation(chapterId ?: return null, ratio), System.currentTimeMillis())
+    }
+    fun saveEpubLocation() {
+        if (epubDocument == null) return
+        scope.launch {
+            activeEpubProgressCoordinator.captureAndSave(::captureEpubProgress)
+        }
+    }
+    fun closeReader() {
+        if (epubDocument != null) {
+            scope.launch {
+                activeEpubProgressCoordinator.saveBeforeClose(
+                    timeoutMillis = 300,
+                    capture = ::captureEpubProgress,
+                )
+                onClose()
+            }
             return
         }
-        activeWebView.evaluateJavascript(
-            "(function(){const d=document.documentElement;const m=Math.max(0,d.scrollHeight-innerHeight);return m===0?0:scrollY/m})()",
-        ) { raw ->
-            val ratio = raw?.trim('"')?.toDoubleOrNull()?.takeIf { it.isFinite() } ?: 0.0
-            onEpubLocationChanged(EpubLocation(chapterId, ratio.coerceIn(0.0, 1.0)))
-            afterSave()
+        val activeTxtDocument = txtDocument
+        if (activeTxtDocument == null) {
+            onClose()
+            return
+        }
+        scope.launch {
+            activeTxtProgressCoordinator.saveBeforeClose(
+                totalUtf16Units = activeTxtDocument.totalUtf16Units,
+                timeoutMillis = 300,
+            ) {
+                webView?.evaluateLong(
+                    "window.__TXT_READER__ ? window.__TXT_READER__.characterOffset() : null",
+                )
+            }
+            onClose()
         }
     }
     fun openChapter(chapterId: String) {
         val chapter = epubDocument?.chapter(chapterId) ?: return
-        saveEpubLocation {
-            currentChapterId = chapter.id
-            currentUrl = chapter.url
-            needsInitialRestore = false
-            showContents = false
+        val oldChapterId = currentChapterId ?: return
+        epubScrollSaveJob?.cancel()
+        scope.launch {
+            saveEpubBeforeChapterChange(
+                oldChapterId = oldChapterId,
+                newChapterId = chapter.id,
+                coordinator = activeEpubProgressCoordinator,
+                captureRatio = {
+                    webView?.evaluateDouble(EPUB_CHAPTER_RATIO_SCRIPT)
+                },
+                loadChapter = {
+                    currentChapterId = chapter.id
+                    currentUrl = chapter.url
+                    needsInitialRestore = false
+                    showContents = false
+                },
+            )
         }
     }
     val callbacks = remember {
         object : WebSecurityCallbacks {
             override fun onNavigationBlocked(decision: NavigationDecision, url: String) {
-                Toast.makeText(context, decision.message(), Toast.LENGTH_LONG).show()
+                when (decision) {
+                    NavigationDecision.BlockLogin -> loginBlocked = true
+                    NavigationDecision.ConfirmCleartext -> pendingCleartextUrl = url
+                    else -> Toast.makeText(context, decision.message(), Toast.LENGTH_LONG).show()
+                }
             }
 
             override fun onLoginRiskDetected() {
-                Toast.makeText(context, "检测到登录页面，已停止继续浏览", Toast.LENGTH_LONG).show()
+                loginBlocked = true
             }
         }
     }
     DisposableEffect(lifecycleOwner, epubDocument, currentChapterId, webView) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) saveEpubLocation()
+            if (event == Lifecycle.Event.ON_STOP) {
+                epubScrollSaveJob?.cancel()
+                saveEpubLocation()
+                saveTxtProgress()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -134,45 +285,33 @@ fun ReaderScreen(
                 showContents = false
             }
             ReaderBackTarget.WebHistory -> webView?.goBack()
-            ReaderBackTarget.CloseReader -> saveEpubLocation(onClose)
+            ReaderBackTarget.CloseReader -> closeReader()
         }
     }
-    AdaptiveReaderChrome(
-        supportingContent = {
-            ReaderSettingsSheet(
-                fontScale = fontScale,
-                onFontScaleChange = { scale ->
-                    fontScale = scale
-                    webView?.evaluateJavascript(
-                        "document.documentElement.style.fontSize='${(scale * 100).toInt()}%'",
-                        null,
-                    )
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text(readerTitle, maxLines = 2) },
+                navigationIcon = {
+                    TextButton(
+                        onClick = ::closeReader,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) { Text("返回") }
                 },
-                onClearWebData = {
-                    CookieManager.getInstance().removeAllCookies(null)
-                    WebStorage.getInstance().deleteAllData()
-                    webView?.clearFormData()
-                    webView?.clearCache(true)
-                    webView?.clearHistory()
+                actions = {
+                    TextButton(
+                        onClick = { showSettings = true },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) { Text("更多") }
                 },
-                onClearRules = {
-                    runtime?.let { current ->
-                        scope.launch { viewModel.clearRules(current) }
-                    }
-                },
-                onClearHistory = onClearHistory,
-                onClearEpubCache = onClearEpubCache,
             )
         },
-    ) {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column {
+        bottomBar = {
+            if (!loginBlocked && persistentError == null) {
                 ReaderToolbar(
                     ruleCount = state.persisted.size,
                     onRules = { showRules = true },
-                    onClose = {
-                        saveEpubLocation(onClose)
-                    },
                     showContents = !epubDocument?.tableOfContents.isNullOrEmpty(),
                     onContents = { showContents = true },
                     hasPrevious = currentChapter?.previousChapterId != null,
@@ -180,6 +319,39 @@ fun ReaderScreen(
                     onPrevious = { currentChapter?.previousChapterId?.let(::openChapter) },
                     onNext = { currentChapter?.nextChapterId?.let(::openChapter) },
                 )
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { contentPadding ->
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding),
+        ) {
+            if (loginBlocked) {
+                LoginBlockedContent(
+                    onReturnHome = onClose,
+                    onOpenOtherUrl = onOpenOtherUrl,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else if (persistentError != null) {
+                ReaderErrorScreen(
+                    error = persistentError,
+                    onRecovery = {
+                        when (persistentError.recoveryAction) {
+                            RecoveryAction.RetryRuntime,
+                            RecoveryAction.ReloadDocument,
+                            -> viewModel.beginRuntime()
+                            RecoveryAction.RetryApply,
+                            RecoveryAction.ReopenDatabaseAndRetryApply,
+                            -> Unit
+                            else -> closeReader()
+                        }
+                    },
+                    onReturnHome = ::closeReader,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
                 AndroidView(
                     factory = { androidContext ->
                         ReaderWebView(
@@ -188,30 +360,51 @@ fun ReaderScreen(
                             securityCallbacks = callbacks,
                             txtPathHandler = txtPathHandler,
                             epubPathHandler = epubDocument?.pathHandler,
-                            onRuntimeReady = { installedRuntime ->
+                            confirmedCleartextUrl = confirmedCleartextUrl,
+                            onRuntimeReady = { installedRuntime, complete ->
                                 runtime = installedRuntime
                                 if (needsInitialRestore) {
                                     val ratio = epubDocument?.initialLocation?.scrollRatio ?: 0.0
                                     webView?.post {
                                         webView?.evaluateJavascript(
-                                            "scrollTo(0,Math.max(0,document.documentElement.scrollHeight-innerHeight)*$ratio)",
+                                            "scrollTo(0,Math.max(1,document.documentElement.scrollHeight-document.documentElement.clientHeight)*$ratio)",
                                             null,
                                         )
                                     }
                                     needsInitialRestore = false
                                 }
                                 scope.launch {
-                                    viewModel.reapplyPersisted(installedRuntime).onFailure {
-                                        Toast.makeText(
-                                            context,
-                                            it.message ?: "规则重新应用失败",
-                                            Toast.LENGTH_LONG,
-                                        ).show()
+                                    val result = viewModel.reapplyPersisted(installedRuntime)
+                                    complete(result.isSuccess)
+                                    if (result.isSuccess && needsInitialTxtRestore) {
+                                        val offset = txtDocument?.initialOffset ?: 0
+                                        webView?.evaluateJavascript(
+                                            "window.__TXT_READER__ && window.__TXT_READER__.restoreCharacterOffset($offset)",
+                                            null,
+                                        )
+                                        needsInitialTxtRestore = false
                                     }
                                 }
                             },
                         ).also {
                             webView = it
+                            if (txtDocument != null || epubDocument != null) {
+                                it.setOnScrollChangeListener { _, _, _, _, _ ->
+                                    if (txtDocument != null) {
+                                        val now = SystemClock.elapsedRealtime()
+                                        if (now - lastTxtSampleAt >= 2_000) {
+                                            lastTxtSampleAt = now
+                                            saveTxtProgress()
+                                        }
+                                    } else {
+                                        epubScrollSaveJob?.cancel()
+                                        epubScrollSaveJob = scope.launch {
+                                            delay(2_000)
+                                            activeEpubProgressCoordinator.captureAndSave(::captureEpubProgress)
+                                        }
+                                    }
+                                }
+                            }
                             it.loadUrl(currentUrl)
                         }
                     },
@@ -219,6 +412,7 @@ fun ReaderScreen(
                         if (webView.url != currentUrl) webView.loadUrl(currentUrl)
                     },
                     onRelease = {
+                        epubScrollSaveJob?.cancel()
                         webView = null
                         it.destroy()
                     },
@@ -229,19 +423,45 @@ fun ReaderScreen(
     }
     MaterialTheme {
         if (showRules) {
-            ModalBottomSheet(onDismissRequest = { showRules = false }) {
-                RuleEditorSheet(
-                    state = state,
-                    onEdit = viewModel::editRule,
-                    onChange = viewModel::changeRule,
-                    onAdd = viewModel::addRule,
-                    onDelete = viewModel::deleteRule,
-                    onApply = {
+            AdaptiveRuleEditorPanel(
+                state = state,
+                onEdit = viewModel::editRule,
+                onChange = viewModel::changeRule,
+                onAdd = viewModel::addRule,
+                onDelete = viewModel::deleteRule,
+                onApply = {
+                    runtime?.let { current ->
+                        scope.launch { viewModel.applyAll(current) }
+                    }
+                },
+                onDismiss = { showRules = false },
+            )
+        }
+        if (showSettings) {
+            ModalBottomSheet(onDismissRequest = { showSettings = false }) {
+                ReaderSettingsSheet(
+                    fontScale = fontScale,
+                    onFontScaleChange = { scale ->
+                        fontScale = scale
+                        webView?.evaluateJavascript(
+                            "document.documentElement.style.fontSize='${(scale * 100).toInt()}%'",
+                            null,
+                        )
+                    },
+                    onClearWebData = {
+                        CookieManager.getInstance().removeAllCookies(null)
+                        WebStorage.getInstance().deleteAllData()
+                        webView?.clearFormData()
+                        webView?.clearCache(true)
+                        webView?.clearHistory()
+                    },
+                    onClearRules = {
                         runtime?.let { current ->
-                            scope.launch { viewModel.applyAll(current) }
+                            scope.launch { viewModel.clearRules(current) }
                         }
                     },
-                    onDismiss = { showRules = false },
+                    onClearHistory = onClearHistory,
+                    onClearEpubCache = onClearEpubCache,
                 )
             }
         }
@@ -265,6 +485,46 @@ fun ReaderScreen(
                 )
             }
         }
+        pendingCleartextUrl?.let { target ->
+            AlertDialog(
+                onDismissRequest = { pendingCleartextUrl = null },
+                title = { Text("此链接未加密") },
+                text = { Text("继续打开可能暴露或篡改阅读内容。") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingCleartextUrl = null
+                            webView?.confirmCleartextAndLoad(target)
+                        },
+                    ) { Text("仍要打开") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingCleartextUrl = null }) { Text("取消") }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoginBlockedContent(
+    onReturnHome: () -> Unit,
+    onOpenOtherUrl: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("不支持在本应用内登录", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = onReturnHome, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text("返回首页")
+        }
+        TextButton(onClick = onOpenOtherUrl, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text("打开其他公开链接")
+        }
     }
 }
 
@@ -272,7 +532,6 @@ fun ReaderScreen(
 internal fun ReaderToolbar(
     ruleCount: Int,
     onRules: () -> Unit,
-    onClose: () -> Unit,
     showContents: Boolean,
     onContents: () -> Unit,
     hasPrevious: Boolean,
@@ -280,52 +539,42 @@ internal fun ReaderToolbar(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
-    val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val rows = readerToolbarRows(
-            widthDp = maxWidth.value.toInt(),
-            fontScale = density.fontScale,
-            hasPrevious = hasPrevious,
-            showContents = showContents,
-            hasNext = hasNext,
-        )
-        Column(
+    val actions = readerToolbarRows(
+        widthDp = 0,
+        fontScale = 1f,
+        hasPrevious = hasPrevious,
+        showContents = showContents,
+        hasNext = hasNext,
+    ).single()
+    BottomAppBar {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            rows.forEach { actions ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+            actions.forEach { action ->
+                Button(
+                    onClick = when (action) {
+                        ReaderToolbarAction.Previous -> onPrevious
+                        ReaderToolbarAction.Contents -> onContents
+                        ReaderToolbarAction.Next -> onNext
+                        ReaderToolbarAction.Rules -> onRules
+                    },
+                    modifier = Modifier
+                        .widthIn(min = 96.dp)
+                        .heightIn(min = 48.dp),
                 ) {
-                    actions.forEach { action ->
-                        Button(
-                            onClick = when (action) {
-                                ReaderToolbarAction.Close -> onClose
-                                ReaderToolbarAction.Previous -> onPrevious
-                                ReaderToolbarAction.Contents -> onContents
-                                ReaderToolbarAction.Next -> onNext
-                                ReaderToolbarAction.Rules -> onRules
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp),
-                        ) {
-                            Text(
-                                text = when (action) {
-                                    ReaderToolbarAction.Close -> "关闭"
-                                    ReaderToolbarAction.Previous -> "上一章"
-                                    ReaderToolbarAction.Contents -> "目录"
-                                    ReaderToolbarAction.Next -> "下一章"
-                                    ReaderToolbarAction.Rules -> "规则 $ruleCount"
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
+                    Text(
+                        text = when (action) {
+                            ReaderToolbarAction.Previous -> "上一章"
+                            ReaderToolbarAction.Contents -> "目录"
+                            ReaderToolbarAction.Next -> "下一章"
+                            ReaderToolbarAction.Rules -> "规则 $ruleCount"
+                        },
+                    )
                 }
             }
         }
@@ -333,7 +582,6 @@ internal fun ReaderToolbar(
 }
 
 internal enum class ReaderToolbarAction {
-    Close,
     Previous,
     Contents,
     Next,
@@ -348,24 +596,12 @@ internal fun readerToolbarRows(
     hasNext: Boolean,
 ): List<List<ReaderToolbarAction>> {
     val actions = buildList {
-        add(ReaderToolbarAction.Close)
+        add(ReaderToolbarAction.Rules)
         if (hasPrevious) add(ReaderToolbarAction.Previous)
         if (showContents) add(ReaderToolbarAction.Contents)
         if (hasNext) add(ReaderToolbarAction.Next)
-        add(ReaderToolbarAction.Rules)
     }
-    val needsWrap = actions.size > 3 && widthDp < 480 * fontScale
-    if (!needsWrap) return listOf(actions)
-
-    val navigation = actions.filter {
-        it == ReaderToolbarAction.Close ||
-            it == ReaderToolbarAction.Previous ||
-            it == ReaderToolbarAction.Next
-    }
-    val tools = actions.filter {
-        it == ReaderToolbarAction.Contents || it == ReaderToolbarAction.Rules
-    }
-    return listOf(navigation, tools).filter(List<ReaderToolbarAction>::isNotEmpty)
+    return listOf(actions)
 }
 
 private fun NavigationDecision.message(): String = when (this) {
@@ -374,3 +610,33 @@ private fun NavigationDecision.message(): String = when (this) {
     NavigationDecision.BlockLogin -> "登录页面已被拦截"
     is NavigationDecision.Block -> reason
 }
+
+private suspend fun ReaderWebView.evaluateLong(script: String): Long? =
+    suspendCancellableCoroutine { continuation ->
+        evaluateJavascript(script) { raw ->
+            if (continuation.isActive) {
+                continuation.resume(
+                    raw
+                        ?.trim('"')
+                        ?.takeUnless { it == "null" || it == "undefined" }
+                        ?.toDoubleOrNull()
+                        ?.takeIf(Double::isFinite)
+                        ?.toLong(),
+                )
+            }
+        }
+    }
+
+private suspend fun ReaderWebView.evaluateDouble(script: String): Double? =
+    suspendCancellableCoroutine { continuation ->
+        evaluateJavascript(script) { raw ->
+            if (continuation.isActive) {
+                continuation.resume(
+                    raw
+                        ?.trim('"')
+                        ?.takeUnless { it == "null" || it == "undefined" }
+                        ?.toDoubleOrNull(),
+                )
+            }
+        }
+    }

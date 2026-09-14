@@ -8,8 +8,18 @@ describe('Android project', () => {
     expect(build).toContain('compileSdk = 36');
     expect(build).toContain('minSdk = 26');
     expect(build).toContain('targetSdk = 36');
-    expect(build).toContain('versionCode = 2');
-    expect(build).toContain('versionName = "0.1.1"');
+    expect(build).toContain('versionCode = 3');
+    expect(build).toContain('versionName = "0.2.0"');
+  });
+
+  it('registers the Room migration without destructive fallback', async () => {
+    const module = await readFile(
+      'android/app/src/main/java/com/xiaoshuo/yijianhuanming/di/AppModule.kt',
+      'utf8',
+    );
+
+    expect(module).toContain('.addMigrations(MIGRATION_1_2)');
+    expect(module).not.toContain('fallbackToDestructiveMigration');
   });
 
   it('does not request sensitive permissions', async () => {

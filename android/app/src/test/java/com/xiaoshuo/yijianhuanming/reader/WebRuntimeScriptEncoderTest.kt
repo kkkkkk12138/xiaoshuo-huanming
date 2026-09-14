@@ -25,10 +25,10 @@ class WebRuntimeScriptEncoderTest {
     }
 
     @Test
-    fun empty_rules_restore_original_text_instead_of_applying_an_empty_payload() {
+    fun empty_rules_use_the_same_structured_apply_contract() {
         val script = encoder.applyRules(emptyList())
 
-        assertTrue(script.contains("restoreOriginalText()"))
-        assertFalse(script.contains("applyRules"))
+        assertTrue(script.contains("applyRules"))
+        assertEquals("[]", encoder.extractPayload(script))
     }
 }

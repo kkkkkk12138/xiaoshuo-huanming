@@ -48,7 +48,7 @@ class NavigationPolicy(
         return when (urlDecision) {
             UrlDecision.Allow -> NavigationDecision.Allow
             UrlDecision.ConfirmCleartext -> {
-                if (rawUrl.trim() == confirmedCleartextUrl?.trim()) {
+                if (urlPolicy.normalize(rawUrl) == confirmedCleartextUrl?.let(urlPolicy::normalize)) {
                     NavigationDecision.Allow
                 } else {
                     NavigationDecision.ConfirmCleartext

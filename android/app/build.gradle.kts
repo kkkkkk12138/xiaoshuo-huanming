@@ -23,8 +23,8 @@ android {
         applicationId = "com.xiaoshuo.yijianhuanming"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -59,12 +59,19 @@ android {
     sourceSets["main"].assets.directories.add(
         layout.buildDirectory.dir("generated/assets/webRuntime").get().asFile.absolutePath,
     )
+    sourceSets["androidTest"].assets.directories.add(
+        file("$projectDir/schemas").absolutePath,
+    )
 
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencyLocking {
@@ -86,10 +93,12 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.icu4j)
     implementation(libs.jsoup)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
     ksp(libs.androidx.room.compiler)
     ksp(libs.hilt.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(libs.json)
 
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)

@@ -37,6 +37,18 @@ class AndroidInputResolver(context: Context) : InputResolver {
             }
         }
     }
+
+    override suspend fun resolveUrl(rawUrl: String): Result<ReaderInput.WebUrl> =
+        delegate.resolve(
+            InputRequest(
+                action = InputAction.Send,
+                mimeType = "text/plain",
+                sharedText = rawUrl,
+            ),
+        ).mapCatching { input ->
+            val web = input as? ResolvedInput.WebUrl ?: error("输入不是网页链接")
+            ReaderInput.WebUrl(Uri.parse(web.uri))
+        }
 }
 
 private class ContentResolverDocumentAccess(

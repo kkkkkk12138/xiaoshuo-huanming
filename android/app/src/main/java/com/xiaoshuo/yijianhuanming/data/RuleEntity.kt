@@ -20,7 +20,7 @@ data class ReplaceRule(
 
 fun normalizeRules(rules: List<ReplaceRule>): List<ReplaceRule> =
     rules
-        .map { it.copy(source = it.source.trim(), target = it.target.trim()) }
+        .map { it.copy(source = sharedTrim(it.source), target = sharedTrim(it.target)) }
         .filter { it.source.isNotEmpty() && it.target.isNotEmpty() }
         .sortedBy { it.order }
 

@@ -22,5 +22,14 @@ data class EpubLimits(
     }
 }
 
-class EpubValidationException(message: String, cause: Throwable? = null) :
-    IOException(message, cause)
+enum class EpubFailureReason {
+    INVALID,
+    DRM,
+    FIXED_LAYOUT,
+}
+
+class EpubValidationException(
+    message: String,
+    cause: Throwable? = null,
+    val reason: EpubFailureReason = EpubFailureReason.INVALID,
+) : IOException(message, cause)

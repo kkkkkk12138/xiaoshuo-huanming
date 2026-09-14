@@ -12,4 +12,6 @@ data class ReaderSessionEntity(
     val chapterId: String?,
     val scrollRatio: Double,
     val lastOpenedAt: Long,
+    val textOffset: Long? = null,
+    val textTotalAtSave: Long? = null,
 )

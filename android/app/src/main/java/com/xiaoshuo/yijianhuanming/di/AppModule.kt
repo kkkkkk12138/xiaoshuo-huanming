@@ -3,6 +3,7 @@ package com.xiaoshuo.yijianhuanming.di
 import android.content.Context
 import androidx.room.Room
 import com.xiaoshuo.yijianhuanming.data.AppDatabase
+import com.xiaoshuo.yijianhuanming.data.MIGRATION_1_2
 import com.xiaoshuo.yijianhuanming.data.ReaderSessionDao
 import com.xiaoshuo.yijianhuanming.data.RoomRuleRepository
 import com.xiaoshuo.yijianhuanming.data.RuleDao
@@ -26,7 +27,9 @@ abstract class AppModule {
         @Provides
         @Singleton
         fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "name-replacer.db").build()
+            Room.databaseBuilder(context, AppDatabase::class.java, "name-replacer.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
 
         @Provides
         fun provideRuleDao(database: AppDatabase): RuleDao = database.ruleDao()

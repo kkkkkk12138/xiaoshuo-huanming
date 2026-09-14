@@ -23,10 +23,13 @@ class ReaderWebView(
     confirmedCleartextUrl: String? = null,
     txtPathHandler: TxtAssetPathHandler? = null,
     epubPathHandler: EpubAssetPathHandler? = null,
-    onRuntimeReady: (RuleRuntime) -> Unit = {},
+    onRuntimeReady: (RuleRuntime, (Boolean) -> Unit) -> Unit = { _, complete ->
+        complete(true)
+    },
 ) : WebView(context) {
     private val navigationPolicy = NavigationPolicy(profile)
     private val runtimeController = WebRuntimeController(this)
+    private val secureClient: SecureWebViewClient
     private val assetLoader = if (profile == WebViewProfile.LOCAL_READER) {
         WebViewAssetLoader.Builder()
             .apply {
@@ -42,16 +45,22 @@ class ReaderWebView(
     }
 
     init {
+        if (profile == WebViewProfile.REMOTE_PUBLIC_WEB) {
+            visibility = View.INVISIBLE
+            isEnabled = false
+        }
         profile.applyTo(this)
         importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-        webViewClient = SecureWebViewClient(
+        secureClient = SecureWebViewClient(
             navigationPolicy = navigationPolicy,
             runtimeController = runtimeController,
             callbacks = securityCallbacks,
             confirmedCleartextUrl = confirmedCleartextUrl,
+            remoteProfile = profile == WebViewProfile.REMOTE_PUBLIC_WEB,
             onRuntimeReady = onRuntimeReady,
             assetLoader = assetLoader,
         )
+        webViewClient = secureClient
         webChromeClient = object : WebChromeClient() {
             override fun onCreateWindow(
                 view: WebView,
@@ -79,9 +88,19 @@ class ReaderWebView(
         runtimeController.clearRemoteSession()
     }
 
+    fun confirmCleartextAndLoad(url: String) {
+        secureClient.confirmCleartextAndLoad(this, url)
+    }
+
+    fun markSecurityChecksPassed() {
+        secureClient.markSecurityChecksPassed(this)
+    }
+
     override fun destroy() {
         if (profile == WebViewProfile.REMOTE_PUBLIC_WEB) {
             clearSession()
+        } else {
+            runtimeController.invalidate()
         }
         removeAllViews()
         super.destroy()

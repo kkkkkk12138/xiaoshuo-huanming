@@ -9,17 +9,72 @@ import com.xiaoshuo.yijianhuanming.data.forRuntime
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONObject
+import org.json.JSONTokener
 
 interface RuleRuntime {
-    suspend fun applyRules(rules: List<ReplaceRule>): Result<Unit>
-    suspend fun restoreOriginalText(): Result<Unit>
+    suspend fun applyRules(rules: List<ReplaceRule>): Result<RuleApplyResult>
+
+    suspend fun restoreOriginalText(): Result<Unit> = applyRules(emptyList()).map {}
+}
+
+data class RuleMatchCount(
+    val ruleId: String,
+    val replacementCount: Int,
+)
+
+data class RuleApplyResult(
+    val activeRuleCount: Int,
+    val changedTextNodeCount: Int,
+    val replacementCount: Int,
+    val perRule: List<RuleMatchCount>,
+)
+
+class RuntimeResultParser {
+    fun parse(raw: String?): Result<RuleApplyResult> = runCatching {
+        require(!raw.isNullOrBlank() && raw != "null") { "Runtime returned no result" }
+        val decoded = JSONTokener(raw).nextValue()
+        val payload = when (decoded) {
+            is String -> JSONObject(decoded)
+            is JSONObject -> decoded
+            else -> error("Runtime returned malformed JSON")
+        }
+        check(payload.optBoolean("ok", false)) {
+            payload.optString("message", "Runtime rejected the operation")
+        }
+
+        val perRuleJson = payload.getJSONArray("perRule")
+        val perRule = buildList {
+            repeat(perRuleJson.length()) { index ->
+                val item = perRuleJson.getJSONObject(index)
+                val count = item.getInt("replacementCount")
+                require(count >= 0) { "Rule replacement count must be non-negative" }
+                add(
+                    RuleMatchCount(
+                        ruleId = item.getString("ruleId"),
+                        replacementCount = count,
+                    ),
+                )
+            }
+        }
+        val result = RuleApplyResult(
+            activeRuleCount = payload.getInt("activeRuleCount"),
+            changedTextNodeCount = payload.getInt("changedTextNodeCount"),
+            replacementCount = payload.getInt("replacementCount"),
+            perRule = perRule,
+        )
+        require(result.activeRuleCount >= 0) { "Active rule count must be non-negative" }
+        require(result.changedTextNodeCount >= 0) { "Changed node count must be non-negative" }
+        require(result.replacementCount >= 0) { "Replacement count must be non-negative" }
+        require(result.perRule.sumOf(RuleMatchCount::replacementCount) == result.replacementCount) {
+            "Per-rule counts do not match replacement total"
+        }
+        result
+    }
 }
 
 class WebRuntimeScriptEncoder {
     fun applyRules(rules: List<ReplaceRule>): String {
-        if (rules.isEmpty()) {
-            return "window.__NAME_REPLACER__.restoreOriginalText()"
-        }
         val payload = rules.forRuntime().joinToString(prefix = "[", postfix = "]") { rule ->
             """{"id":${quote(rule.id)},"source":${quote(rule.source)},"target":${quote(rule.target)},"order":${rule.order}}"""
         }
@@ -103,6 +158,7 @@ class WebRuntimeController(
     private val webView: WebView,
     private val generations: NavigationGenerations = NavigationGenerations(),
     private val encoder: WebRuntimeScriptEncoder = WebRuntimeScriptEncoder(),
+    private val resultParser: RuntimeResultParser = RuntimeResultParser(),
 ) : RuleRuntime {
     fun beginNavigation(): Long = generations.beginNavigation()
 
@@ -130,40 +186,44 @@ class WebRuntimeController(
     fun applyRules(
         generation: Long,
         rules: List<ReplaceRule>,
-        onResult: (Boolean) -> Unit,
+        onResult: (Result<RuleApplyResult>) -> Unit,
     ) {
         val operation = encoder.applyRules(rules)
         val script = """
             (function() {
               try {
-                if (!window.__NAME_REPLACER__) return false;
+                if (!window.__NAME_REPLACER__) {
+                  return JSON.stringify({
+                    ok: false,
+                    code: "NOT_INSTALLED",
+                    message: "Name replacer runtime is not installed"
+                  });
+                }
                 const result = $operation;
-                return result === undefined || result.ok === true;
-              } catch (_) {
-                return false;
+                return JSON.stringify(result);
+              } catch (error) {
+                return JSON.stringify({
+                  ok: false,
+                  code: "RUNTIME_ERROR",
+                  message: String(error)
+                });
               }
             })()
         """.trimIndent()
         evaluateForGeneration(generation, script) { result ->
-            onResult(result == "true")
+            onResult(resultParser.parse(result))
         }
     }
 
-    override suspend fun applyRules(rules: List<ReplaceRule>): Result<Unit> =
+    override suspend fun applyRules(rules: List<ReplaceRule>): Result<RuleApplyResult> =
         evaluateCurrentRules(rules)
 
-    override suspend fun restoreOriginalText(): Result<Unit> =
-        evaluateCurrentRules(emptyList())
-
-    private suspend fun evaluateCurrentRules(rules: List<ReplaceRule>): Result<Unit> =
+    private suspend fun evaluateCurrentRules(rules: List<ReplaceRule>): Result<RuleApplyResult> =
         suspendCancellableCoroutine { continuation ->
             val generation = generations.current()
-            applyRules(generation, rules) { success ->
+            applyRules(generation, rules) { result ->
                 if (continuation.isActive) {
-                    continuation.resume(
-                        if (success) Result.success(Unit)
-                        else Result.failure(IllegalStateException("网页换名失败")),
-                    )
+                    continuation.resume(result)
                 }
             }
         }
@@ -190,6 +250,10 @@ class WebRuntimeController(
         webView.clearFormData()
         webView.clearCache(true)
         webView.clearHistory()
+    }
+
+    fun invalidate() {
+        generations.invalidate()
     }
 
     companion object {

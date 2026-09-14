@@ -23,7 +23,10 @@ class EpubPackageParser {
                 throw EpubValidationException("文件不是有效 EPUB")
             }
             if (root.resolve("META-INF/encryption.xml").exists()) {
-                throw EpubValidationException("不支持加密或 DRM EPUB")
+                throw EpubValidationException(
+                    "不支持加密或 DRM EPUB",
+                    reason = EpubFailureReason.DRM,
+                )
             }
             val container = parseXml(root.resolve("META-INF/container.xml"))
             val rootfile = container.getElementsByTagNameNS("*", "rootfile").item(0) as? Element
@@ -85,7 +88,10 @@ class EpubPackageParser {
             val isFixed = (key == "rendition:layout" && value == "pre-paginated") ||
                 (key == "fixed-layout" && value.equals("true", ignoreCase = true))
             if (isFixed) {
-                throw EpubValidationException("首版不支持 fixed-layout EPUB")
+                throw EpubValidationException(
+                    "首版不支持 fixed-layout EPUB",
+                    reason = EpubFailureReason.FIXED_LAYOUT,
+                )
             }
         }
     }

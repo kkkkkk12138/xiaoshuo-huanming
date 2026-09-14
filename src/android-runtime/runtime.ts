@@ -23,25 +23,8 @@ function isValidRules(rules: unknown): rules is OrderedReplaceRule[] {
 
 function orderRules(rules: OrderedReplaceRule[]): ReplaceRule[] {
   return [...rules]
-    .sort((left, right) => right.source.length - left.source.length || left.order - right.order)
+    .sort((left, right) => left.order - right.order)
     .map(({ id, source, target }) => ({ id, source, target }));
-}
-
-function collectTextNodes(doc: Document): Text[] {
-  if (!doc.body) {
-    return [];
-  }
-
-  const nodes: Text[] = [];
-  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
-  let current = walker.nextNode();
-
-  while (current) {
-    nodes.push(current as Text);
-    current = walker.nextNode();
-  }
-
-  return nodes;
 }
 
 function errorMessage(error: unknown): string {
@@ -75,18 +58,12 @@ export function installNameReplacerRuntime(doc: Document): NameReplacerRuntime {
       }
 
       try {
-        const textNodes = collectTextNodes(doc);
-        const previousValues = textNodes.map((node) => node.nodeValue);
-        engine.applyToDocument(doc, orderRules(rules));
-        const changedTextNodeCount = textNodes.reduce(
-          (count, node, index) => count + (node.nodeValue === previousValues[index] ? 0 : 1),
-          0
-        );
+        const summary = engine.applyToDocument(doc, orderRules(rules));
 
         return {
           ok: true,
           activeRuleCount: rules.length,
-          changedTextNodeCount
+          ...summary
         };
       } catch (error) {
         return {
@@ -98,9 +75,28 @@ export function installNameReplacerRuntime(doc: Document): NameReplacerRuntime {
     },
 
     restoreOriginalText() {
-      if (installed) {
-        engine.applyToDocument(doc, []);
+      if (!installed) {
+        return {
+          ok: false,
+          code: 'NOT_INSTALLED',
+          message: 'Name replacer runtime is not installed'
+        };
       }
+
+      const summary = engine.applyToDocument(doc, []);
+      return {
+        ok: true,
+        activeRuleCount: 0,
+        ...summary
+      };
+    },
+
+    renderedOffsetToSource(node, renderedOffset) {
+      return engine.renderedOffsetToSource(node, renderedOffset);
+    },
+
+    sourceOffsetToRendered(node, sourceOffset) {
+      return engine.sourceOffsetToRendered(node, sourceOffset);
     },
 
     dispose() {

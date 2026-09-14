@@ -7,30 +7,43 @@ import java.net.URI
 sealed interface UrlDecision {
     data object Allow : UrlDecision
     data object ConfirmCleartext : UrlDecision
-    data class Reject(val reason: String) : UrlDecision
+    data class Reject(
+        val reason: String,
+        val kind: UrlRejectKind,
+    ) : UrlDecision
+}
+
+enum class UrlRejectKind {
+    INVALID,
+    UNSAFE,
 }
 
 class UrlPolicy {
     fun evaluate(rawUrl: String): UrlDecision {
-        val uri = runCatching { URI(rawUrl.trim()) }.getOrNull()
-            ?: return UrlDecision.Reject("链接格式无效")
+        val uri = runCatching { URI(normalize(rawUrl)) }.getOrNull()
+            ?: return UrlDecision.Reject("链接格式无效", UrlRejectKind.INVALID)
         val scheme = uri.scheme?.lowercase()
         if (scheme != "http" && scheme != "https") {
-            return UrlDecision.Reject("仅支持 HTTP/HTTPS 链接")
+            return UrlDecision.Reject("仅支持 HTTP/HTTPS 链接", UrlRejectKind.UNSAFE)
         }
-        if (!uri.isAbsolute || uri.rawUserInfo != null || uri.host.isNullOrBlank()) {
-            return UrlDecision.Reject("链接缺少有效的公网主机")
+        if (!uri.isAbsolute || uri.host.isNullOrBlank()) {
+            return UrlDecision.Reject("链接缺少有效的公网主机", UrlRejectKind.INVALID)
+        }
+        if (uri.rawUserInfo != null) {
+            return UrlDecision.Reject("链接不能包含账号凭据", UrlRejectKind.UNSAFE)
         }
         if (runCatching { uri.port }.getOrElse { -2 } == -2) {
-            return UrlDecision.Reject("链接端口无效")
+            return UrlDecision.Reject("链接端口无效", UrlRejectKind.INVALID)
         }
 
         val host = uri.host.lowercase().trimEnd('.')
         if (isLocalName(host) || isUnsafeIpLiteral(host)) {
-            return UrlDecision.Reject("不允许访问本机或私网地址")
+            return UrlDecision.Reject("不允许访问本机或私网地址", UrlRejectKind.UNSAFE)
         }
         return if (scheme == "https") UrlDecision.Allow else UrlDecision.ConfirmCleartext
     }
+
+    fun normalize(rawUrl: String): String = rawUrl.trim(*URL_BOUNDARY_WHITESPACE)
 
     private fun isLocalName(host: String): Boolean =
         host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local")
@@ -60,5 +73,15 @@ class UrlPolicy {
             octets[0] == 172 && octets[1] in 16..31 ||
             octets[0] == 192 && octets[1] == 168 ||
             octets[0] == 100 && octets[1] in 64..127
+    }
+
+    private companion object {
+        val URL_BOUNDARY_WHITESPACE = charArrayOf(
+            '\u0009', '\u000A', '\u000B', '\u000C', '\u000D', '\u0020',
+            '\u0085', '\u00A0', '\u1680', '\u2000', '\u2001', '\u2002',
+            '\u2003', '\u2004', '\u2005', '\u2006', '\u2007', '\u2008',
+            '\u2009', '\u200A', '\u2028', '\u2029', '\u202F', '\u205F',
+            '\u3000', '\uFEFF',
+        )
     }
 }

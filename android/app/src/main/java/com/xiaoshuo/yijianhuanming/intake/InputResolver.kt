@@ -4,6 +4,7 @@ import android.content.Intent
 
 interface InputResolver {
     suspend fun resolve(intent: Intent): Result<ReaderInput>
+    suspend fun resolveUrl(rawUrl: String): Result<ReaderInput.WebUrl>
 }
 
 object InputAction {

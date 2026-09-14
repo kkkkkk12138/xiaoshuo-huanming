@@ -11,6 +11,10 @@ class UrlPolicyTest {
     fun allows_public_https_and_requires_confirmation_for_http() {
         assertEquals(UrlDecision.Allow, policy.evaluate("https://example.com/book"))
         assertEquals(UrlDecision.ConfirmCleartext, policy.evaluate("http://example.com/book"))
+        assertEquals(
+            UrlDecision.Allow,
+            policy.evaluate("\u00A0\uFEFFhttps://example.com/book\uFEFF"),
+        )
     }
 
     @Test
@@ -30,6 +34,8 @@ class UrlPolicyTest {
             "content://reader/a.txt",
             "javascript:alert(1)",
             "intent://x",
+            "",
+            "/chapter/1",
         ).forEach {
             assertTrue("$it should be rejected", policy.evaluate(it) is UrlDecision.Reject)
         }

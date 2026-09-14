@@ -45,4 +45,16 @@ class RuleNormalizerTest {
         assertEquals(listOf("short", "long"), normalized.map { it.id })
         assertEquals(listOf("long", "short"), normalized.forRuntime().map { it.id })
     }
+
+    @Test
+    fun normalization_uses_shared_trim_for_nbsp_and_bom() {
+        val normalized = normalizeRules(
+            listOf(
+                ReplaceRule("1", "\uFEFF\u00A0宝宝 ", " 新名\uFEFF", 0),
+            ),
+        )
+
+        assertEquals("宝宝", normalized.single().source)
+        assertEquals("新名", normalized.single().target)
+    }
 }

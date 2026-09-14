@@ -6,12 +6,29 @@ describe('Android page runtime', () => {
   it('applies longest sources first and restores from original text', () => {
     document.body.innerHTML = '<p>沈清辞和沈清</p>';
     const runtime = installNameReplacerRuntime(document);
-    runtime.applyRules([
+    const applied = runtime.applyRules([
       { id: 'short', source: '沈清', target: 'A', order: 0 },
       { id: 'long', source: '沈清辞', target: 'B', order: 1 }
     ]);
+    expect(applied).toEqual({
+      ok: true,
+      activeRuleCount: 2,
+      changedTextNodeCount: 1,
+      replacementCount: 2,
+      perRule: [
+        { ruleId: 'short', replacementCount: 1 },
+        { ruleId: 'long', replacementCount: 1 }
+      ]
+    });
     expect(document.body.textContent).toBe('B和A');
-    runtime.applyRules([]);
+    const restored = runtime.restoreOriginalText();
+    expect(restored).toEqual({
+      ok: true,
+      activeRuleCount: 0,
+      changedTextNodeCount: 1,
+      replacementCount: 0,
+      perRule: []
+    });
     expect(document.body.textContent).toBe('沈清辞和沈清');
   });
 

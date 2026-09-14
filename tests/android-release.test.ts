@@ -57,4 +57,56 @@ describe('Android release', () => {
       access('scripts/verify-android-release.mjs'),
     ]);
   });
+
+  it('runs JVM, lint, app assembly, and instrumentation compilation gates in CI', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain('branches: [main]');
+    expect(workflow).toContain(':app:testDebugUnitTest');
+    expect(workflow).toContain(':app:lintDebug');
+    expect(workflow).toContain(':app:assembleDebug');
+    expect(workflow).toContain(':app:assembleDebugAndroidTest');
+    expect(workflow).toContain('instrumentation:\n    runs-on: ubuntu-latest');
+    await Promise.all([
+      access(
+        'android/app/src/androidTest/java/com/xiaoshuo/yijianhuanming/data/AppDatabaseTest.kt',
+      ),
+      access(
+        'android/app/src/androidTest/java/com/xiaoshuo/yijianhuanming/content/web/WebViewSecurityTest.kt',
+      ),
+      access(
+        'android/app/src/androidTest/java/com/xiaoshuo/yijianhuanming/AdaptiveReaderTest.kt',
+      ),
+    ]);
+  });
+
+  it('publishes the verified APK to a GitHub prerelease for Android beta tags', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain("tags: ['v*-android-beta']");
+    expect(workflow).toContain('softprops/action-gh-release@v2');
+    expect(workflow).toContain('prerelease: true');
+    expect(workflow).toContain(
+      'android/app/build/outputs/apk/debug/app-debug.apk',
+    );
+  });
+
+  it('blocks beta publication when the APK certificate cannot upgrade existing installs', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain('Verify upgrade-compatible signing certificate');
+    expect(workflow).toContain(
+      '555cd54c5a83ee3cc978ba407105632dd33f4de28521802821384e40eafbd8ee',
+    );
+    expect(workflow).toContain('Signer #1 certificate SHA-256 digest');
+    expect(workflow).toContain('exit 1');
+  });
+
+  it('publishes installation guidance instead of a changelog-only release body', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain('body: |');
+    expect(workflow).toContain('不要下载 GitHub 自动生成的 `Source code`');
+    expect(workflow).toContain('可从 `0.1.1 (2)` 直接覆盖升级');
+  });
 });

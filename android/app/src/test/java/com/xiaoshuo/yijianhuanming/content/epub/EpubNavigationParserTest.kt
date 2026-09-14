@@ -10,6 +10,15 @@ class EpubNavigationParserTest {
     private val parser = EpubNavigationParser()
 
     @Test
+    fun normalizes_non_finite_and_out_of_bounds_chapter_ratios() {
+        assertEquals(0.0, normalizeChapterRatio(Double.NaN), 0.0)
+        assertEquals(0.0, normalizeChapterRatio(Double.NEGATIVE_INFINITY), 0.0)
+        assertEquals(0.0, normalizeChapterRatio(-1.0), 0.0)
+        assertEquals(0.4, normalizeChapterRatio(0.4), 0.0)
+        assertEquals(1.0, normalizeChapterRatio(2.0), 0.0)
+    }
+
+    @Test
     fun parses_epub3_nav_in_spine_order_and_resolves_relative_fragment_links() {
         val root = fixture(
             opf = """
@@ -143,8 +152,12 @@ class EpubNavigationParserTest {
             "OEBPS/content.opf",
         )
 
-        assertEquals(EpubLocation("one", 0.0), book.restoreLocation(EpubLocation("missing", 0.5)))
-        assertEquals(EpubLocation("one", 0.0), book.restoreLocation(EpubLocation("one", Double.NaN)))
+        val missing = book.resolveLocation(EpubLocation("missing", 0.5))
+        assertEquals(EpubLocation("one", 0.0), missing.location)
+        assertTrue(missing.repaired)
+        val normalized = book.resolveLocation(EpubLocation("one", Double.NaN))
+        assertEquals(EpubLocation("one", 0.0), normalized.location)
+        assertTrue(normalized.repaired)
         assertNull(EpubLocation.decode("not-a-location"))
     }
 

@@ -10,9 +10,11 @@ class LoginRiskPolicyTest {
         val policy = LoginRiskPolicy()
 
         assertTrue(policy.isLoginUrl("https://site.test/login"))
-        assertTrue(policy.isLoginUrl("https://site.test/oauth/sign-in"))
+        assertFalse(policy.isLoginUrl("https://site.test/oauth/sign-in"))
         assertTrue(policy.isLoginUrl("https://site.test/passport/index"))
+        assertTrue(policy.isLoginUrl("https://site.test/account/AUTH/callback"))
         assertFalse(policy.isLoginUrl("https://site.test/books/login-history"))
+        assertFalse(policy.isLoginUrl("https://site.test/authors"))
         assertFalse(policy.isLoginUrl("https://site.test/read/1"))
     }
 
@@ -21,7 +23,9 @@ class LoginRiskPolicyTest {
         val script = LoginRiskPolicy.PASSWORD_FORM_GUARD_SCRIPT
 
         assertTrue(script.contains("input[type=\"password\"]"))
-        assertTrue(script.contains("preventDefault"))
+        assertTrue(script.contains("getComputedStyle"))
+        assertTrue(script.contains("getBoundingClientRect"))
+        assertFalse(script.contains(".value"))
         assertFalse(script.contains("addJavascriptInterface"))
     }
 }

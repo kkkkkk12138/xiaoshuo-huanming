@@ -26,9 +26,15 @@ class LocalReaderAssetsTest {
         val script = assets.resolve("local-reader.js").readText()
 
         assertTrue(script.contains("MAX_DOM_CHUNKS = 5"))
-        assertTrue(script.contains("startCharacterOffset"))
-        assertTrue(script.contains("endCharacterOffset"))
+        assertTrue(script.contains("dataset.sourceStart"))
+        assertTrue(script.contains("dataset.sourceEnd"))
+        assertTrue(script.contains("totalUtf16Units"))
+        assertTrue(script.contains("caretPositionFromPoint"))
+        assertTrue(script.contains("caretRangeFromPoint"))
+        assertTrue(script.contains("sourceOffsetWithinChunk"))
+        assertTrue(script.contains("consumed += renderedOffsetToSource(node, renderedLength)"))
         assertTrue(script.contains("viewportHeight * 2"))
         assertTrue(script.contains("replaceChildren"))
+        assertFalse(script.contains("scrollHeight * ratio"))
     }
 }

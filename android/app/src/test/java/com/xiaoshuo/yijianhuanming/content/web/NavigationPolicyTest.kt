@@ -75,6 +75,13 @@ class NavigationPolicyTest {
             NavigationDecision.ConfirmCleartext,
             policy.evaluate("http://public.example/chapter/2", confirmedCleartextUrl = url),
         )
+        assertEquals(
+            NavigationDecision.ConfirmCleartext,
+            policy.evaluate(
+                "http://public.example/chapter/1",
+                confirmedCleartextUrl = "https://public.example/chapter/1",
+            ),
+        )
     }
 
     @Test

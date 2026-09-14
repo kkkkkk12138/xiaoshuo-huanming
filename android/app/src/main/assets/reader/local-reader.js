@@ -7,6 +7,7 @@
   const chunkCount = Number(params.get('chunks') || 0);
   const starts = (params.get('starts') || '').split(',').filter(Boolean).map(Number);
   const requestedOffset = Number(params.get('offset') || 0);
+  const totalUtf16Units = Number(params.get('totalUtf16Units') || 0);
   const reader = document.getElementById('reader');
   const status = document.getElementById('status');
   const loaded = new Map();
@@ -33,10 +34,10 @@
     const element = document.createElement('section');
     element.className = 'chunk';
     element.dataset.index = String(index);
-    element.dataset.startCharacterOffset =
+    element.dataset.sourceStart =
       response.headers.get('X-Character-Start') || String(starts[index] || 0);
-    element.dataset.endCharacterOffset =
-      response.headers.get('X-Character-End') || element.dataset.startCharacterOffset;
+    element.dataset.sourceEnd =
+      response.headers.get('X-Character-End') || element.dataset.sourceStart;
     element.innerHTML = await response.text();
     loaded.set(index, element);
   }
@@ -75,29 +76,112 @@
     }
   }
 
-  function visibleCharacterOffset() {
-    const chunks = [...reader.querySelectorAll('.chunk')];
-    const visible = chunks.find(element => element.getBoundingClientRect().bottom > 0);
-    if (!visible) return requestedOffset;
-    const startCharacterOffset = Number(visible.dataset.startCharacterOffset || 0);
-    const endCharacterOffset = Number(visible.dataset.endCharacterOffset || startCharacterOffset);
+  function textPointFromViewport() {
+    const visible = [...reader.querySelectorAll('.chunk')]
+      .find(element => element.getBoundingClientRect().bottom > 0);
+    if (!visible) return null;
     const rect = visible.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, -rect.top / Math.max(1, rect.height)));
-    return Math.round(startCharacterOffset + (endCharacterOffset - startCharacterOffset) * ratio);
+    const x = Math.max(1, Math.min(window.innerWidth - 1, rect.left + 8));
+    const y = Math.max(1, Math.min(window.innerHeight - 1, rect.top + 1));
+    if (typeof document.caretPositionFromPoint === 'function') {
+      const position = document.caretPositionFromPoint(x, y);
+      if (position) return { node: position.offsetNode, offset: position.offset };
+    }
+    if (typeof document.caretRangeFromPoint === 'function') {
+      const range = document.caretRangeFromPoint(x, y);
+      if (range) return { node: range.startContainer, offset: range.startOffset };
+    }
+    return null;
+  }
+
+  function textNodeAt(point) {
+    if (point?.node?.nodeType === Node.TEXT_NODE) return point;
+    const root = point?.node?.nodeType === Node.ELEMENT_NODE ? point.node : null;
+    const node = root && document.createTreeWalker(root, NodeFilter.SHOW_TEXT).nextNode();
+    return node ? { node, offset: 0 } : null;
+  }
+
+  function renderedOffsetToSource(node, offset) {
+    const runtime = window.__NAME_REPLACER__;
+    return typeof runtime?.renderedOffsetToSource === 'function'
+      ? runtime.renderedOffsetToSource(node, offset)
+      : offset;
+  }
+
+  function sourceOffsetToRendered(node, offset) {
+    const runtime = window.__NAME_REPLACER__;
+    return typeof runtime?.sourceOffsetToRendered === 'function'
+      ? runtime.sourceOffsetToRendered(node, offset)
+      : offset;
+  }
+
+  function sourceOffsetWithinChunk(chunk, targetNode, renderedOffset) {
+    const walker = document.createTreeWalker(chunk, NodeFilter.SHOW_TEXT);
+    let consumed = 0;
+    let node = walker.nextNode();
+    while (node) {
+      if (node === targetNode) {
+        return consumed + renderedOffsetToSource(node, renderedOffset);
+      }
+      const renderedLength = node.nodeValue?.length || 0;
+      consumed += renderedOffsetToSource(node, renderedLength);
+      node = walker.nextNode();
+    }
+    return consumed;
+  }
+
+  function characterOffset() {
+    const point = textNodeAt(textPointFromViewport());
+    const chunk = point?.node?.parentElement?.closest('.chunk');
+    if (!point || !chunk) return Math.max(0, Math.min(totalUtf16Units, requestedOffset));
+    const sourceStart = Number(chunk.dataset.sourceStart || 0);
+    const localOffset = sourceOffsetWithinChunk(chunk, point.node, point.offset);
+    return Math.max(0, Math.min(totalUtf16Units, sourceStart + localOffset));
+  }
+
+  function findRenderedPosition(element, sourceOffset) {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let consumed = 0;
+    let node = walker.nextNode();
+    while (node) {
+      const renderedLength = node.nodeValue?.length || 0;
+      const sourceLength = renderedOffsetToSource(node, renderedLength);
+      if (sourceOffset <= consumed + sourceLength) {
+        return {
+          node,
+          offset: sourceOffsetToRendered(node, sourceOffset - consumed),
+        };
+      }
+      consumed += sourceLength;
+      node = walker.nextNode();
+    }
+    return null;
+  }
+
+  function scrollToPosition(position, fallbackTop) {
+    if (!position) {
+      window.scrollTo(0, fallbackTop);
+      return;
+    }
+    const range = document.createRange();
+    range.setStart(position.node, position.offset);
+    range.collapse(true);
+    const rect = range.getBoundingClientRect();
+    window.scrollTo(0, window.scrollY + rect.top);
   }
 
   window.__TXT_READER__ = {
-    characterOffset: visibleCharacterOffset,
+    characterOffset,
     restoreCharacterOffset: async offset => {
-      const target = chunkIndexForOffset(Number(offset));
+      const normalized = Math.max(0, Math.min(totalUtf16Units, Number(offset) || 0));
+      const target = chunkIndexForOffset(normalized);
       await loadWindow(target);
       const element = loaded.get(target);
       if (!element) return;
-      const start = Number(element.dataset.startCharacterOffset || 0);
-      const end = Number(element.dataset.endCharacterOffset || start);
-      const ratio = Math.max(0, Math.min(1, (Number(offset) - start) / Math.max(1, end - start)));
-      window.scrollTo(0, element.offsetTop + element.scrollHeight * ratio);
+      const sourceStart = Number(element.dataset.sourceStart || 0);
+      scrollToPosition(findRenderedPosition(element, normalized - sourceStart), element.offsetTop);
     },
+    totalUtf16Units,
   };
 
   window.addEventListener('scroll', () => {

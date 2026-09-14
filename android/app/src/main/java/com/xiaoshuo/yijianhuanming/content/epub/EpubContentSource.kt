@@ -21,6 +21,7 @@ data class EpubReaderDocument(
     val tableOfContents: List<EpubTocEntry>,
     val initialLocation: EpubLocation,
     val pathHandler: EpubAssetPathHandler,
+    val initialLocationRepaired: Boolean = false,
 ) {
     val initialUrl: String
         get() = chapter(initialLocation.chapterId)?.url ?: chapters.first().url
@@ -57,6 +58,7 @@ class EpubContentSource(
                 throw EpubValidationException("EPUB manifest 引用了不存在的资源")
             }
             val resourceResolver = EpubResourceResolver(sessionId, whitelist)
+            val locationResolution = book.resolveLocation(savedLocation)
             val chapters = book.chapters.map { chapter ->
                 EpubReaderChapter(
                     id = chapter.id,
@@ -71,7 +73,8 @@ class EpubContentSource(
                 sessionId = sessionId,
                 chapters = chapters,
                 tableOfContents = book.tableOfContents,
-                initialLocation = book.restoreLocation(savedLocation),
+                initialLocation = locationResolution.location,
+                initialLocationRepaired = locationResolution.repaired,
                 pathHandler = EpubAssetPathHandler(sessionId, directory, book),
             )
         }.onFailure {

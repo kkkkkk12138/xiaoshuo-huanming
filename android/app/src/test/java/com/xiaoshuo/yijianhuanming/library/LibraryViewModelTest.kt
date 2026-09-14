@@ -3,6 +3,7 @@ package com.xiaoshuo.yijianhuanming.library
 import com.xiaoshuo.yijianhuanming.data.ReaderSessionEntity
 import com.xiaoshuo.yijianhuanming.data.ReplaceRule
 import com.xiaoshuo.yijianhuanming.data.RuleRepository
+import com.xiaoshuo.yijianhuanming.reader.RuleApplyResult
 import com.xiaoshuo.yijianhuanming.reader.RuleRuntime
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -110,7 +111,14 @@ private class FakeCache : EpubCache {
 
 private class FakeRuntime : RuleRuntime {
     var restoreCalls = 0
-    override suspend fun applyRules(rules: List<ReplaceRule>) = Result.success(Unit)
+    override suspend fun applyRules(rules: List<ReplaceRule>) = Result.success(
+        RuleApplyResult(
+            activeRuleCount = rules.size,
+            changedTextNodeCount = 0,
+            replacementCount = 0,
+            perRule = emptyList(),
+        ),
+    )
     override suspend fun restoreOriginalText(): Result<Unit> {
         restoreCalls += 1
         return Result.success(Unit)
