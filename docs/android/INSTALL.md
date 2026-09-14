@@ -2,13 +2,13 @@
 
 ## 最快安装
 
-1. 打开 [Android Beta 发布页](https://github.com/kkkkkk12138/xiaoshuo-yijian-huanming/releases/tag/v0.1.0-android-beta)。
-2. 点击 `xiaoshuo-yijian-huanming-android-0.1.0-debug.apk`。
+1. 打开 [Android 0.2.0 Beta 发布页](https://github.com/kkkkkk12138/xiaoshuo-huanming/releases/tag/v0.2.0-android-beta)。
+2. 点击 `xiaoshuo-yijian-huanming-android-0.2.0-debug.apk`。
 3. 下载完成后打开 APK。
 4. 系统提示时，允许当前浏览器或文件管理器“安装未知应用”。
 5. 安装完成后关闭该来源的“安装未知应用”权限。
 
-只想安装使用时，不需要下载 Source code，也不需要安装 Git、Android Studio 或其他开发工具。
+只想安装使用时，不要下载 `Source code (zip)`、`Source code (tar.gz)` 或名称以 `DO-NOT-USE-old-signature-` 开头的旧文件，也不需要安装 Git、Android Studio 或其他开发工具。
 
 ## 使用网页换名
 
@@ -34,7 +34,7 @@
 将 APK 与同目录的 `.sha256` 文件放在一起，在 macOS/Linux 执行：
 
 ```bash
-shasum -a 256 -c xiaoshuo-yijian-huanming-android-0.1.0-debug.apk.sha256
+shasum -a 256 -c xiaoshuo-yijian-huanming-android-0.2.0-debug.apk.sha256
 ```
 
 只有显示 `OK` 时才继续安装。校验失败表示文件不完整或已被修改。
@@ -42,12 +42,12 @@ shasum -a 256 -c xiaoshuo-yijian-huanming-android-0.1.0-debug.apk.sha256
 当前 APK SHA-256：
 
 ```text
-c579b1810ed413dedf032d352453ab7d02a73b3c97dc2050c3bb8da0ca927cdf
+232caabd7814b7ec53930813344e8b178d791acf210945666c99da6ffdae9153
 ```
 
 ## 覆盖升级
 
-保留原应用，校验新版 APK 后直接安装。Android 只有在 application ID 与签名证书一致且 `versionCode` 不降低时才允许覆盖升级；否则不要卸载旧版绕过检查。升级后检查换名规则、最近阅读和阅读位置仍然存在。
+已安装 `0.1.1 (2)` 时，保留原应用，校验新版 APK 后直接覆盖安装 `0.2.0 (3)`。两版的 application ID 与签名证书一致，升级会保留换名规则、最近阅读和阅读位置；若系统提示签名不一致，说明下载了错误资产，请不要卸载旧版绕过检查。
 
 当前版本使用 Debug 证书。未来正式版切换到 Release 证书时可能无法直接覆盖安装，因此不要在测试版中保存无法重新创建的重要数据。
 

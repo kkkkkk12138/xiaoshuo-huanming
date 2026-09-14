@@ -90,4 +90,23 @@ describe('Android release', () => {
       'android/app/build/outputs/apk/debug/app-debug.apk',
     );
   });
+
+  it('blocks beta publication when the APK certificate cannot upgrade existing installs', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain('Verify upgrade-compatible signing certificate');
+    expect(workflow).toContain(
+      '555cd54c5a83ee3cc978ba407105632dd33f4de28521802821384e40eafbd8ee',
+    );
+    expect(workflow).toContain('Signer #1 certificate SHA-256 digest');
+    expect(workflow).toContain('exit 1');
+  });
+
+  it('publishes installation guidance instead of a changelog-only release body', async () => {
+    const workflow = await readFile('.github/workflows/android.yml', 'utf8');
+
+    expect(workflow).toContain('body: |');
+    expect(workflow).toContain('不要下载 GitHub 自动生成的 `Source code`');
+    expect(workflow).toContain('可从 `0.1.1 (2)` 直接覆盖升级');
+  });
 });

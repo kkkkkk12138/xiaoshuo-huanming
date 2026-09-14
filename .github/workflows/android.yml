@@ -67,6 +67,19 @@ jobs:
       - run: npm ci
       - run: npm run build:android-runtime
       - run: ./android/gradlew -p android :app:assembleDebug
+      - name: Verify upgrade-compatible signing certificate
+        env:
+          EXPECTED_CERT_SHA256: 555cd54c5a83ee3cc978ba407105632dd33f4de28521802821384e40eafbd8ee
+        run: |
+          actual="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2)}')"
+          if [ "$actual" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::APK signing certificate cannot upgrade existing beta installs."
+            echo "Expected: $EXPECTED_CERT_SHA256"
+            echo "Actual:   ${actual:-missing}"
+            exit 1
+          fi
       - name: Prepare release assets
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk \
@@ -78,7 +91,19 @@ jobs:
         with:
           name: Android 0.2.0 核心体验修复测试版
           prerelease: true
-          generate_release_notes: true
+          body: |
+            ## 正确下载方式
+
+            请下载 `xiaoshuo-yijian-huanming-android-0.2.0-debug.apk`。
+            不要下载 GitHub 自动生成的 `Source code`，它不是可安装包。
+
+            已安装旧测试版的用户可从 `0.1.1 (2)` 直接覆盖升级到 `0.2.0 (3)`，无需卸载，规则和阅读记录会保留。
+
+            ## 主要修复
+
+            - 修复窄屏和鸿蒙设备上的阅读页按钮溢出、状态栏遮挡。
+            - 规则应用增加过程与替换数量反馈，保存后立即刷新正文。
+            - 修复网页链接入口、TXT 文件名以及 TXT/EPUB 阅读进度。
           files: |
             xiaoshuo-yijian-huanming-android-0.2.0-debug.apk
             xiaoshuo-yijian-huanming-android-0.2.0-debug.apk.sha256

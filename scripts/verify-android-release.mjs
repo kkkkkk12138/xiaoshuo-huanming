@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const sourceApk = join(root, 'android/app/build/outputs/apk/release/app-release.apk');
-const outputApk = join(root, 'dist/小说一键换名-android-0.1.0.apk');
+const outputApk = join(root, 'dist/小说一键换名-android-0.2.0.apk');
 const checksumFile = `${outputApk}.sha256`;
 
 function fail(message) {
